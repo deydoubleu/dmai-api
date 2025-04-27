@@ -11,8 +11,10 @@
   "author": "Dan Wakista",
   "license": "MIT",
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.43.1",
     "express": "^5.1.0",
     "openai": "^4.95.0",
     "stream-chat": "^8.59.0"
@@ -21,6 +23,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
     "@types/node": "^22.14.1",
+    "drizzle-kit": "^0.31.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"
   }
