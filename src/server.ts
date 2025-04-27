@@ -4,6 +4,10 @@ import dotenv from 'dotenv';
 import { promises } from 'dns';
 import { StreamChat } from 'stream-chat';
 import OpenAI from 'openai';
+import { db } from './config/database.js';
+import { chats, users } from './db/schema.js';
+import { eq } from 'drizzle-orm';
+import { ChatCompletionMessageParam } from 'openai/resources';
 
 dotenv.config();
 
@@ -45,9 +49,19 @@ app.post('/register-user',
                     name: name,
                     email: email,
                     role: 'user'
-                });
+                } );
             }
 
+            const existingUser = await db
+            .select()
+            .from( users )
+            .where( eq( users.userId,userId ));
+
+            if ( !existingUser.length ) {
+                console.log(`adding new user with id: ${userId}`);
+                await db.insert( users ).values({ userId, name, email });
+            }
+        
             return res.status(200).json({ userId, name, email });
         } catch (error) {
             return res.status(500).json({ error: 'Internal Server error' });
@@ -71,14 +85,37 @@ app.post('/chat', async (req: Request, res: Response): Promise<any> => {
             return res.status(404).json({ error: "User not found."});
         }
 
+        // Checking for user in the database
+        const existingUser = await db
+            .select()
+            .from( users )
+            .where( eq( users.userId,userId ));
+
+            if ( !existingUser.length ) {
+                return res.status(404).json({ error: "user not found in db" });
+            }
+
         // Send a message to OpenAI.
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',
             messages: [{ role: 'user' , content: message}]
         });
 
-        console.log(response.choices[0].message);
-        res.send('Success');
+        const aiMessage: string =  response.choices[0].message?.content ?? 'No response from AI';
+
+        // Saving chat to db
+        await db.insert( chats ).values({ userId, message, reply: aiMessage});
+
+        // Creating/ accessing channel
+        const channel = chatClient.channel('messaging', `chat-${userId}`, {
+            name: 'DM AI',
+            created_by_id: 'ai_bot'
+        });
+
+        await channel.create();
+        await channel.sendMessage({ text: aiMessage, user_id: 'ai_bot' });
+
+        res.status(200).json({ reply: aiMessage });
 
     } catch (error) {
         console.error(error);
@@ -86,6 +123,28 @@ app.post('/chat', async (req: Request, res: Response): Promise<any> => {
     }
 
 });
+
+// Get all chats for a user
+app.post( '/get-messages', async ( req: Request, res: Response ): Promise<any> => {
+    const { userId } = req.body;
+
+    if ( !userId ) {
+        return res.status(400).json({ error: 'userId is required' });
+    }
+
+    try{
+        const chatHistory = await db
+            .select()
+            .from (chats )
+            .where( eq( chats.userId, userId ));
+
+            res.status(200).json({ messages: chatHistory });
+    } catch ( error ) {
+        console.error( error );
+        res.status(500).json({error: "internal server error."});
+    }
+
+} );
 
 const PORT = process.env.PORT || 5000;
 
