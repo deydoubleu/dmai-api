@@ -95,10 +95,27 @@ app.post('/chat', async (req: Request, res: Response): Promise<any> => {
                 return res.status(404).json({ error: "user not found in db" });
             }
 
+        // Fetch past messages for context
+        const chatHistory = await db
+            .select()
+            .from (chats )
+            .where( eq( chats.userId, userId ))
+            .orderBy( chats.createdAt )
+            .limit( 10 );
+
+        const convo: ChatCompletionMessageParam[] = chatHistory.flatMap(
+            (chat) => [
+                { role: 'user', content: chat.message },
+                { role: 'assistant', content: chat.reply }
+            ]
+        );
+
+        convo.push({ role: 'user', content: message });
+        
         // Send a message to OpenAI.
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',
-            messages: [{ role: 'user' , content: message}]
+            messages: convo as ChatCompletionMessageParam[],
         });
 
         const aiMessage: string =  response.choices[0].message?.content ?? 'No response from AI';
